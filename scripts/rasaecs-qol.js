@@ -1,5 +1,5 @@
 /**
- * Rasaec's QOL — v2.1.0
+ * Rasaec's QOL — v2.2.0
  *
  * Feature 1: Auto-clear targets when a token you own ends its turn in combat.
  *
@@ -43,6 +43,37 @@ const SOCK       = `module.${MODULE_ID}`;
 
 // ─── Per-message shield-block state (client-local Map<messageId, Set<tokenUuid>>) ──
 const shieldActive = new Map();
+
+// ─── Feature 6: spell-card hold until AoE targeting completes ────────────────
+// When a spell with a save is cast, the PF2e system posts the chat card before
+// the player has placed (or confirmed targets in) an AoE template.  We hide
+// the card immediately on the caster's client and release it — with the save
+// tray already populated — once the AoE picker dialog resolves.
+const pendingSpellCards  = new Set();       // Set<messageId>
+const SPELL_CARD_HOLD_MS = 10_000;          // safety release after 10 s
+
+function _hideSpellCard(messageId) {
+  const li = document.querySelector(`li.chat-message[data-message-id="${messageId}"]`);
+  if (!li || li.dataset.ctoteHeld) return;
+  li.dataset.ctoteHeld = "1";
+  li.style.display = "none";
+  pendingSpellCards.add(messageId);
+}
+
+function _releaseSpellCard(messageId) {
+  pendingSpellCards.delete(messageId);
+  const li = document.querySelector(`li.chat-message[data-message-id="${messageId}"]`);
+  if (!li) return;
+  delete li.dataset.ctoteHeld;
+  li.style.display = "";
+  // Re-run save-tray injection now that targets should be populated.
+  const message = game.messages.get(messageId);
+  if (message) injectSaveTray(message, $(li));
+}
+
+function releaseAllHeldSpellCards() {
+  for (const id of [...pendingSpellCards]) _releaseSpellCard(id);
+}
 
 // ─── Feature 5: save-result cache (tokenUuid → { outcome, expiresAt }) ─────────
 const saveResultCache   = new Map();
@@ -465,12 +496,12 @@ Hooks.on("combatTurn", (combat, updateData, options) => {
 // ============================================================
 
 Hooks.on("ready", () => {
-  console.log(`${MODULE_ID} | v2.1.0 loaded (system: ${game.system.id}).`);
+  console.log(`${MODULE_ID} | v2.2.0 loaded (system: ${game.system.id}).`);
 
   game.socket.on(SOCK, async (data) => {
     switch (data.action) {
 
-      // ── Feature 1: clear a remote user's targets ──────────────────────────────
+      // ── Feature 1: clear a remote user's targets ──────────────────────────
       case "clearTargets": {
         if (data.userId !== game.user.id) return;
         game.user.targets.forEach(t =>
@@ -481,7 +512,7 @@ Hooks.on("ready", () => {
         break;
       }
 
-      // ── Feature 2b: GM applies damage on behalf of a player ──────────────────
+      // ── Feature 2b: GM applies damage on behalf of a player ──────────────
       // (Only needed when the target token is not owned by the requesting player,
       //  i.e. the player targeted an enemy. The GM's canvas can control any token.)
       case "applyForTarget": {
@@ -490,14 +521,14 @@ Hooks.on("ready", () => {
         break;
       }
 
-      // ── Feature 3: apply targeting selections from another client ─────────────
+      // ── Feature 3: apply targeting selections from another client ─────────
       case "applyAoeTargets": {
         if (data.userId !== game.user.id) return;
         applyAoeTargetList(data.tokenUuids);
         break;
       }
 
-      // ── Feature 4: re-inject save trays after targets confirmed elsewhere ──
+      // ── Feature 4: re-inject save trays after targets confirmed elsewhere ─
       case "reinjectSaveTrays": {
         // Run on all clients EXCEPT the one that already ran it locally
         if (data.userId === game.user.id) return;
@@ -505,7 +536,7 @@ Hooks.on("ready", () => {
         break;
       }
 
-      // ── Feature 3b: GM stamps expiry flags on a template ─────────────────────
+      // ── Feature 3b: GM stamps expiry flags on a template ─────────────────
       case "stampTemplateExpiry": {
         if (!game.user.isGM) return;
         const scene = game.scenes.get(data.sceneId);
@@ -733,7 +764,7 @@ async function showAoePickerDialog(templateDoc, tokensInArea) {
       </div>
     </div>`;
 
-  // ── Helper: read result from a rendered dialog root element ────────────────
+  // ── Helper: read result from a rendered dialog root element ────────────
   function readResult(root) {
     const checked = [...root.querySelectorAll("input[name='token']:checked")]
       .map(el => el.value);
@@ -742,7 +773,7 @@ async function showAoePickerDialog(templateDoc, tokensInArea) {
     return { tokenIds: checked, rounds };
   }
 
-  // ── Helper: wire All / None buttons ────────────────────────────────────────
+  // ── Helper: wire All / None buttons ─────────────────────────────────────
   function wireButtons(root) {
     root.querySelector("#ctote-aoe-all")?.addEventListener("click", () => {
       root.querySelectorAll("input[name='token']").forEach(el => el.checked = true);
@@ -752,7 +783,7 @@ async function showAoePickerDialog(templateDoc, tokensInArea) {
     });
   }
 
-  // ── DialogV2 (Foundry v13+) ─────────────────────────────────────────────────
+  // ── DialogV2 (Foundry v13+) ──────────────────────────────────────────────
   const DialogV2 = foundry.applications?.api?.DialogV2;
   if (DialogV2) {
     return DialogV2.wait({
@@ -779,7 +810,7 @@ async function showAoePickerDialog(templateDoc, tokensInArea) {
     }).catch(() => null);  // dismissed counts as cancel
   }
 
-  // ── Dialog v1 fallback (Foundry v11–v12) ────────────────────────────────────
+  // ── Dialog v1 fallback (Foundry v11–v12) ────────────────────────────────
   return new Promise((resolve) => {
     // eslint-disable-next-line no-undef
     const dlg = new Dialog({
@@ -894,7 +925,7 @@ async function waitForTemplateObject(templateDoc, maxMs = 2000) {
 // Foundry v12+ uses "createMeasuredTemplate" (Document suffix dropped).
 // We register both so it fires on any version.
 async function onTemplatePlaced(templateDoc, _options, userId) {
-  // ── Diagnostics: log everything so we can debug ──────────────────────────────
+  // ── Diagnostics: log everything so we can debug ──────────────────────────
   const pf2eOriginId = templateDoc.flags?.pf2e?.origin?.userId;
   const authorId     = templateDoc.author?.id;
   const docUserId    = authorId; // .user is deprecated in v12+, use .author
@@ -932,15 +963,24 @@ async function onTemplatePlaced(templateDoc, _options, userId) {
   console.log(`${MODULE_ID} | AoE picker: ${tokensInArea.length} token(s) in template area.`);
 
   const result = await showAoePickerDialog(templateDoc, tokensInArea);
-  if (result === null) return; // cancelled
+  if (result === null) {
+    // User cancelled — release any held spell cards immediately so they
+    // appear in chat without a save tray (better than staying hidden).
+    releaseAllHeldSpellCards();
+    return;
+  }
 
   const { tokenIds, rounds } = result;
   applyAoeTargetList(tokenIds);
 
-  // After setting targets, re-inject save trays into any recent spell cards.
-  // Run locally (this is the placing client), and also broadcast to other
-  // clients who may be showing the spell card (e.g. the GM viewing a player's cast).
-  setTimeout(() => reinjectSaveTraysForCurrentTargets(), 100);
+  // Feature 6: Release any held spell cards now that targets are set, then
+  // inject save trays.  A 50 ms tick gives setTarget() time to propagate
+  // before we read game.user.targets.
+  setTimeout(() => {
+    releaseAllHeldSpellCards();
+    reinjectSaveTraysForCurrentTargets();
+  }, 50);
+  // Broadcast to other clients (GM etc.) to re-inject their save trays.
   game.socket.emit(SOCK, {
     action: "reinjectSaveTrays",
     userId: game.user.id,
@@ -1018,7 +1058,7 @@ function getSaveInfoFromMessage(message) {
   const pf2e = message.flags?.pf2e;
   if (!pf2e) return null;
 
-  // ── Save type ────────────────────────────────────────────────────────────────
+  // ── Save type ────────────────────────────────────────────────────────────
   let saveType = null;
   const rollOptions = pf2e.origin?.rollOptions ?? pf2e.context?.options ?? [];
   for (const opt of rollOptions) {
@@ -1030,7 +1070,7 @@ function getSaveInfoFromMessage(message) {
   }
   if (!saveType || !SAVE_LABELS[saveType]) return null;
 
-  // ── DC ───────────────────────────────────────────────────────────────────────
+  // ── DC ───────────────────────────────────────────────────────────────────
   let dc = null;
 
   // 1. Try flag paths directly on the message
@@ -1259,6 +1299,17 @@ function injectSaveTray(message, html) {
 
   if (!uuids.length) {
     console.log(`${MODULE_ID} | No targets found.`);
+    // Feature 6: If this card was just posted by the local user and has a save,
+    // a template / picker is likely on the way.  Hide the card now; we'll show
+    // it with a fully-populated save tray once the picker resolves.
+    const isRecent = (Date.now() - (message.timestamp ?? 0)) < 2000;
+    const isAuthor = (message.author?.id ?? message.user?.id) === game.user.id;
+    if (isRecent && isAuthor) {
+      _hideSpellCard(message.id);
+      setTimeout(() => {
+        if (pendingSpellCards.has(message.id)) _releaseSpellCard(message.id);
+      }, SPELL_CARD_HOLD_MS);
+    }
     return;
   }
 
@@ -1327,52 +1378,42 @@ function applyDamageTrayHighlight(tokenUuid, outcome) {
     if (!row) continue;
 
     // Clear previous Feature 5 classes
-    row.querySelectorAll(".ctote-btn-half, .ctote-btn-full, .ctote-btn-double")
-       .forEach(btn => btn.classList.remove("ctote-btn-save-suggested", "ctote-btn-save-nodamage"));
+    row.querySelectorAll(".ctote-btn").forEach(btn => {
+      btn.classList.remove("ctote-save-suggested", "ctote-save-dimmed");
+    });
 
-    if (outcome == null) continue;
+    if (outcome == null) continue; // just clearing
 
     if (suggestedAction === null) {
       // Critical success: 0 damage — dim all damage buttons
       row.querySelectorAll(".ctote-btn-half, .ctote-btn-full, .ctote-btn-double")
-         .forEach(btn => btn.classList.add("ctote-btn-save-nodamage"));
-    } else if (suggestedAction) {
-      const selector = { half: ".ctote-btn-half", full: ".ctote-btn-full", double: ".ctote-btn-double" }[suggestedAction];
-      row.querySelector(selector)?.classList.add("ctote-btn-save-suggested");
+         .forEach(btn => btn.classList.add("ctote-save-dimmed"));
+    } else {
+      // Highlight the matching button
+      const btnClass = {
+        half:   ".ctote-btn-half",
+        full:   ".ctote-btn-full",
+        double: ".ctote-btn-double",
+      }[suggestedAction];
+      if (btnClass) row.querySelector(btnClass)?.classList.add("ctote-save-suggested");
     }
   }
 }
 
-// When a save result renders, cache it and highlight any open damage trays.
-function _onSaveResultMessage(message) {
+/**
+ * Hook: fires when a new chat message arrives.
+ * We look for PF2e save results and update the damage tray highlights.
+ */
+Hooks.on("createChatMessage", (message) => {
   if (!isSaveResultMessage(message)) return;
   const info = getSaveResultInfo(message);
   if (!info) return;
-  saveResultCache.set(info.tokenUuid, { outcome: info.outcome, expiresAt: Date.now() + SAVE_RESULT_TTL });
-  // Brief tick so any damage tray in the same render pass is already in the DOM
-  setTimeout(() => applyDamageTrayHighlight(info.tokenUuid, info.outcome), 30);
-}
 
-Hooks.on("renderChatMessage",    (message, _html) => _onSaveResultMessage(message));
-Hooks.on("renderChatMessageHTML",(message, _html) => _onSaveResultMessage(message));
+  const { tokenUuid, outcome } = info;
 
-// ── 4B: Socket handler for enemy saves ──────────────────────────────────────
-// Add to ready hook socket listener — we append a new case via the existing
-// socket listener by patching the handler after ready.
-// We use a separate Hooks.on("ready") since the socket listener is already registered.
+  // Cache for 5 minutes — future damage rolls can read this to highlight
+  saveResultCache.set(tokenUuid, { outcome, expiresAt: Date.now() + SAVE_RESULT_TTL });
 
-Hooks.on("ready", () => {
-  // The primary socket listener is registered earlier in the ready hook.
-  // We register a second listener here for Feature 4.
-  game.socket.on(SOCK, async (data) => {
-    if (data.action !== "rollSaveForTarget") return;
-    if (!game.user.isGM) return;
-
-    await rollSaveForToken(
-      data.tokenUuid,
-      data.saveType,
-      data.dc,
-      data.originActorUuid,
-    );
-  });
+  // Apply immediately to any currently-rendered damage trays
+  applyDamageTrayHighlight(tokenUuid, outcome);
 });
