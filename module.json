@@ -1,13 +1,13 @@
 {
   "id": "rasaecs-qol",
   "title": "Rasaec's QOL",
-  "description": "A quality-of-life module for the PF2e/SF2e systems. Features include: (1) Auto-clear targets — automatically removes all of your targets when a token you own ends its turn in combat. (2) Per-target damage tray — appends a row to every damage roll chat card for each targeted token with ½, ×1, ×2, Shield Block, and Heal buttons that route through PF2e's full typed-damage and IWR pipeline; HP values are visible to the GM only. (3) AoE template target picker — when a measured template is placed, a dialog lists all visible tokens in the area with checkboxes so you can confirm who is affected; includes a duration field in rounds that automatically deletes the template at the end of the specified turn. (4) Per-target saving throw buttons — after confirming AoE targets, save buttons are injected into the spell chat card for each targeted token showing the save type and DC, rolling through PF2e's full save pipeline including conditions and modifiers. (5) Save-result damage highlighting — when a saving throw result appears in chat, the matching damage multiplier button (½, ×1, ×2) is highlighted in the damage tray for that token, with critical successes dimming all damage buttons.",
+  "description": "A quality-of-life module for the PF2e/SF2e systems. Features include: (1) Auto-clear targets — automatically removes all of your targets when a token you own ends its turn in combat. (2) Per-target damage tray — appends a row to every damage roll chat card for each targeted token with ½, ×1, ×2, Shield Block, and Heal buttons that route through PF2e's full typed-damage and IWR pipeline; HP values are visible to the GM only. (3) AoE template target picker — when a measured template is placed, a dialog lists all visible tokens in the area with checkboxes so you can confirm who is affected; includes a duration field in rounds that automatically deletes the template at the end of the specified turn. (4) Per-target saving throw buttons — after confirming AoE targets, save buttons are injected into the spell chat card for each targeted token showing the save type and DC, rolling through PF2e's full save pipeline including conditions and modifiers.",
   "authors": [
     {
       "name": "Rasaec"
     }
   ],
-  "version": "2.1.0",
+  "version": "2.2.0",
   "compatibility": {
     "minimum": "11",
     "verified": "14"
