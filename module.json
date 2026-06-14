@@ -1,0 +1,12 @@
+{
+  "id": "rasaecs-qol",
+  "title": "Rasaec's QOL",
+  "description": "A quality-of-life module for the PF2e/SF2e systems.",
+  "authors": [{ "name": "Rasaec" }],
+  "version": "2.0.0",
+  "compatibility": { "minimum": "11", "verified": "14" },
+  "system": ["pf2e", "sf2e"],
+  "esmodules": ["scripts/rasaecs-qol.js"],
+  "socket": true,
+  "styles": ["styles/module.css"]
+}
