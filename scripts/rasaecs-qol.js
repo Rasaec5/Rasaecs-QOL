@@ -50,7 +50,7 @@ const shieldActive = new Map();
 // the card immediately on the caster's client and release it — with the save
 // tray already populated — once the AoE picker dialog resolves.
 const pendingSpellCards  = new Set();       // Set<messageId>
-const SPELL_CARD_HOLD_MS = 10_000;          // safety release after 10 s
+const SPELL_CARD_HOLD_MS = 2_000;           // safety release after 2 s
 
 function _hideSpellCard(messageId) {
   const li = document.querySelector(`li.chat-message[data-message-id="${messageId}"]`);
