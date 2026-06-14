@@ -1,0 +1,20 @@
+# Build artifacts
+*.zip
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor directories
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Node (if tooling is added later)
+node_modules/
+npm-debug.log*
+
+# Foundry local config
+foundryconfig.json
